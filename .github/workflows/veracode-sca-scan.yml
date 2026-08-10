@@ -151,12 +151,6 @@ jobs:
           sparse-checkout: |
             helper/cli/*
 
-      - name: Download workflow metadata from register job
-        uses: actions/download-artifact@v7
-        with:
-          name: workflow-metadata
-          path: .
-
       - name: Run Veracode SCA
         env:
           SRCCLR_API_TOKEN: ${{ secrets.VERACODE_AGENT_TOKEN }}
@@ -174,4 +168,3 @@ jobs:
           sca_fix_enabled: ${{ github.event.client_payload.user_config.sca_fix_enabled }}
           profile_name: ${{ github.event.client_payload.user_config.profile_name }}
           pr_number: ${{ github.event.client_payload.pr_number }}
-
