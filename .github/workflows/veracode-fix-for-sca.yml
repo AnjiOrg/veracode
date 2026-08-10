@@ -1,75 +1,19 @@
 name: Veracode Fix for SCA
 
-run-name: Veracode Fix for SCA - ${{ github.event.client_payload.repository.name }}
+run-name: Veracode Fix for SCA - ${{ github.event.client_payload.workflow_name }}
 
 on:
   repository_dispatch:
     types:
       - veracode-fix-for-sca
-  pull_request:
-    types:
-      - opened
-      - synchronize
-    branches:
-      - main
 
 jobs:
-  check-sca-artifacts:
-    runs-on: ubuntu-latest
-    outputs:
-      artifact-id: ${{ steps.find-artifact.outputs.artifact-id }}
-      has-artifact: ${{ steps.find-artifact.outputs.has-artifact }}
-    steps:
-      - name: Find SCA scan artifacts with retries
-        id: find-artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Look for SCA artifacts from the current PR with retries (for PR events)
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            MAX_RETRIES=30
-            RETRY_COUNT=0
-            ARTIFACTS=""
-
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES: Looking for SCA scan artifacts..."
-
-              ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/runs \
-                -q ".workflow_runs[] | select(.event == \"pull_request\" and .pull_requests[0].number == ${{ github.event.pull_request.number }}) | .id" \
-                --paginate | head -1)
-
-              if [ ! -z "$ARTIFACTS" ]; then
-                echo "Found SCA artifacts!"
-                break
-              fi
-
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "No artifacts found yet. Waiting 10 seconds before retry..."
-                sleep 10
-              fi
-            done
-
-            if [ -z "$ARTIFACTS" ]; then
-              echo "has-artifact=false" >> $GITHUB_OUTPUT
-              echo "WARNING: Could not find SCA artifacts after 30 retries"
-            else
-              echo "artifact-id=$ARTIFACTS" >> $GITHUB_OUTPUT
-              echo "has-artifact=true" >> $GITHUB_OUTPUT
-            fi
-          else
-            # For repository_dispatch, artifacts should be provided in client_payload
-            echo "has-artifact=true" >> $GITHUB_OUTPUT
-          fi
-
   cleanup:
-    if: github.event_name == 'repository_dispatch'
     uses: ./.github/workflows/veracode-clean-up.yml
     with:
       runs_on: ${{ github.event.client_payload.user_config.default_runs_on }}
 
   create_metadata:
-    if: github.event_name == 'repository_dispatch'
     needs: cleanup
     uses: ./.github/workflows/veracode-metadata.yml
     with:
@@ -81,12 +25,10 @@ jobs:
       head_sha: ${{ github.event.client_payload.sha }}
 
   fix-for-sca-action:
-    needs: [check-sca-artifacts]
-    runs-on: ${{ github.event_name == 'repository_dispatch' && fromJSON(github.event.client_payload.user_config.default_runs_on) || 'ubuntu-latest' }}
-    if: github.event_name == 'repository_dispatch' || needs.check-sca-artifacts.outputs.has-artifact == 'true'
+    needs: create_metadata
+    runs-on: ${{ fromJSON(github.event.client_payload.user_config.default_runs_on) }}
     steps:
-    - name: Download SCA scan artifact (repository_dispatch)
-      if: github.event_name == 'repository_dispatch'
+    - name: Download SCA scan artifact
       uses: actions/download-artifact@v7
       with:
         github-token: ${{ github.event.client_payload.token }}
@@ -94,26 +36,21 @@ jobs:
         artifact-ids: ${{ github.event.client_payload.artifact_id }}
         path: ./veracode_artifact_directory
 
-    - name: Download SCA scan artifact (pull_request)
-      if: github.event_name == 'pull_request'
-      uses: actions/download-artifact@v7
+    - name: Check out to get veracode CLI
+      uses: actions/checkout@v6
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        run-id: ${{ needs.check-sca-artifacts.outputs.artifact-id }}
-        path: ./veracode_artifact_directory
-
-    - name: Checkout repo for pre-built CLI (with LFS)
-      uses: actions/checkout@v4
-      with:
-        lfs: true
-        path: 'veracode-repo'
+        path: 'veracode-helper'
+        fetch-depth: 0
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          helper/cli/*
 
     - name: Set up CLI (Linux/macOS)
       id: cli-setup-unix
       if: runner.os != 'Windows'
       shell: bash
       run: |
-        cd veracode-repo/helper/cli
+        cd veracode-helper/helper/cli
         cliFile=$(ls -1 *.tar.gz | head -n 1)
         cliFileName=$(echo "$cliFile" | cut -c 1-$((${#cliFile}-7)))
         tar -zxvf $cliFile
@@ -126,12 +63,12 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        cd veracode-repo/helper/cli
+        cd veracode-helper/helper/cli
         $zipFile = Get-ChildItem -Filter "veracode-cli_*.zip" | Select-Object -First 1 -ExpandProperty FullName
         Expand-Archive -Path $zipFile -DestinationPath . -Force
         $cliExe = Get-ChildItem -Filter "veracode.exe" -Recurse | Select-Object -First 1
         $cliPath = $cliExe.DirectoryName
-        echo "cli-path=$cliPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        echo "cli-path=$cliPath" >> $env:GITHUB_OUTPUT
 
     - name: Configure git for LF line endings (Windows)
       if: runner.os == 'Windows'
@@ -142,24 +79,23 @@ jobs:
 
     - uses: actions/checkout@v6
       with:
-        repository: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.full_name || github.repository }}
-        ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.branch || github.head_ref }}
-        token: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.token || secrets.GITHUB_TOKEN }}
+        repository: ${{ github.event.client_payload.repository.full_name }}
+        ref: ${{ github.event.client_payload.repository.branch }}
+        token: ${{ github.event.client_payload.token }}
         path: 'source-code'
-        lfs: true
 
     - id: run-fix-sca
-      uses: kkhandelwalOrg/veracode-fix-for-sca@runnerFix
+      uses: veracode/veracode-fix-for-sca@v0.1.4
       env:
-        # QA Stage 107 credentials for fix operations (fix-sca only uses API credentials, not SRCCLR token)
-        VERACODE_API_KEY_ID: '${{ secrets.VERACODE_QA_API_ID }}'
-        VERACODE_API_KEY_SECRET: '${{ secrets.VERACODE_QA_API_KEY }}'
-        FIX_SCA_BACKEND_URL: 'api-agora-stage-107.stage.veracode.io'
+        VERACODE_API_KEY_ID: '${{ secrets.VERACODE_API_ID }}'
+        VERACODE_API_KEY_SECRET: '${{ secrets.VERACODE_API_KEY }}'
         CLI_PATH: ${{ runner.os == 'Windows' && steps.cli-setup-windows.outputs.cli-path || steps.cli-setup-unix.outputs.cli-path }}
       with:
-        pr-number: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.issue_number || github.event.pull_request.number }}
-        sca-scan-run-id: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.workflow_run_id || needs.check-sca-artifacts.outputs.artifact-id }}
-        sca-scan-artifact-id: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.artifact_id || needs.check-sca-artifacts.outputs.artifact-id }}
-        repository: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.full_name || github.repository }}
-        branch: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.branch || github.head_ref }}
-        fix-sca-params: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.fix_sca_params || '' }}
+        github-token: ${{ github.event.client_payload.token }}
+        pr-number: ${{ github.event.client_payload.issue_number }} 
+        sca-scan-run-id: ${{ github.event.client_payload.workflow_run_id }} 
+        sca-scan-artifact-id: ${{ github.event.client_payload.artifact_id }} 
+        repository: ${{ github.event.client_payload.repository.full_name }}
+        branch: ${{ github.event.client_payload.repository.branch }} 
+        fix-sca-params: ${{ github.event.client_payload.fix_sca_params }} 
+        github-api-url: ${{ github.api_url }}
