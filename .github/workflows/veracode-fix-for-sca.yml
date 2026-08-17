@@ -28,6 +28,15 @@ jobs:
     needs: create_metadata
     runs-on: ${{ fromJSON(github.event.client_payload.user_config.default_runs_on) }}
     steps:
+    - name: 🟢 GitHub Runner Picked Up
+      run: |
+        echo "════════════════════════════════════════════════════════════════"
+        echo "🟢 GITHUB RUNNER PICKED UP - Job started on runner"
+        echo "    Runner OS: ${{ runner.os }}"
+        echo "    Runner name: ${{ runner.name }}"
+        echo "    Started at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        echo "════════════════════════════════════════════════════════════════"
+
     - name: Download SCA scan artifact
       uses: actions/download-artifact@v7
       with:
