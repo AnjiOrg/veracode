@@ -112,9 +112,15 @@ jobs:
     - name: 🔴 GitHub Runner Released
       if: always()
       run: |
+        # Calculate duration
+        start_time=$(date -d "${{ job.started_at }}" +%s)
+        end_time=$(date +%s)
+        duration=$((end_time - start_time))
+
         echo "════════════════════════════════════════════════════════════════"
         echo "🔴 GITHUB RUNNER RELEASED - Action exiting"
         echo "    Runner released at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        echo "    Total runner active time: ${duration}s"
         echo "    ⚡ Runner released IMMEDIATELY after job submission"
         echo "    ⚡ [GitHub Actions] Backend processes job asynchronously while runner is freed"
         echo "════════════════════════════════════════════════════════════════"
