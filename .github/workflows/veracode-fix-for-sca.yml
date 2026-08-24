@@ -108,6 +108,7 @@ jobs:
         repository: ${{ github.event.client_payload.repository.full_name }}
         branch: ${{ github.event.client_payload.repository.branch }}
         fix-sca-params: ${{ github.event.client_payload.fix_sca_params }}
+        workflow-run-id: ${{ github.run_id }}
 
     - name: 🔴 GitHub Runner Released
       if: always()
