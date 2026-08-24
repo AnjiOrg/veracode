@@ -108,3 +108,13 @@ jobs:
         repository: ${{ github.event.client_payload.repository.full_name }}
         branch: ${{ github.event.client_payload.repository.branch }}
         fix-sca-params: ${{ github.event.client_payload.fix_sca_params }}
+
+    - name: 🔴 GitHub Runner Released
+      if: always()
+      run: |
+        echo "════════════════════════════════════════════════════════════════"
+        echo "🔴 GITHUB RUNNER RELEASED - Action exiting"
+        echo "    Runner released at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        echo "    ⚡ Runner released IMMEDIATELY after job submission"
+        echo "    ⚡ [GitHub Actions] Backend processes job asynchronously while runner is freed"
+        echo "════════════════════════════════════════════════════════════════"
