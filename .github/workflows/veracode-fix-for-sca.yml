@@ -96,4 +96,3 @@ jobs:
         sca-scan-run-id: ${{ github.event.client_payload.workflow_run_id }}
         sca-scan-artifact-id: ${{ github.event.client_payload.artifact_id }}
         fix-sca-params: ${{ github.event.client_payload.fix_sca_params }}
-        fnf-feature-flag: 'true'
