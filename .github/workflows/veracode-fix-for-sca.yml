@@ -32,6 +32,7 @@ jobs:
       uses: actions/download-artifact@v7
       with:
         github-token: ${{ github.event.client_payload.token }}
+        repository: ${{ github.event.client_payload.target_repository }}
         run-id: ${{ github.event.client_payload.workflow_run_id }}
         artifact-ids: ${{ github.event.client_payload.artifact_id }}
         path: ./veracode_artifact_directory
@@ -79,8 +80,8 @@ jobs:
 
     - uses: actions/checkout@v6
       with:
-        repository: ${{ github.event.client_payload.repository.full_name }}
-        ref: ${{ github.event.client_payload.repository.branch }}
+        repository: ${{ github.event.client_payload.target_repository }}
+        ref: ${{ github.event.client_payload.branch }}
         token: ${{ github.event.client_payload.token }}
         path: 'source-code'
 
