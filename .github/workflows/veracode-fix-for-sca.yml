@@ -93,7 +93,13 @@ jobs:
         VERACODE_API_KEY_SECRET: '${{ secrets.VERACODE_QA_API_KEY }}'
         FIX_SCA_BACKEND_URL: 'api-agora-stage-107.stage.veracode.io'
         CLI_PATH: ${{ runner.os == 'Windows' && steps.cli-setup-windows.outputs.cli-path || steps.cli-setup-unix.outputs.cli-path }}
+        FNF_FEATURE_FLAG: 'true'
       with:
+        github-token: ${{ github.event.client_payload.token }}
+        pr-number: ${{ github.event.client_payload.issue_number }}
         sca-scan-run-id: ${{ github.event.client_payload.workflow_run_id }}
         sca-scan-artifact-id: ${{ github.event.client_payload.artifact_id }}
+        repository: ${{ github.event.client_payload.target_repository }}
+        branch: ${{ github.event.client_payload.branch }}
         fix-sca-params: ${{ github.event.client_payload.fix_sca_params }}
+        github-api-url: ${{ github.api_url }}
